@@ -2,6 +2,7 @@
 use macroquad::prelude::*;
 use std::env;
 use std::f64::consts::PI;
+use std::f64::consts::TAU;
 
 const WINDOW_HEIGHT: f64 = 1024.0;
 const WINDOW_WIDTH: f64 = 2048.0;
@@ -12,7 +13,11 @@ const DEGREE: f64 = 0.0174533;
 const FOV: f64 = 90.0;
 const RAY_DENSITY: f64 = WINDOW_WIDTH / FOV;
 const GRID_SIZE: f64 = 16.0;
-const SCALING_FACTOR: f32 = (WINDOW_HEIGHT as f32 / 512.0) * (8.0 / GRID_SIZE as f32);
+const SCALING_FACTOR: f32 =
+    ((WINDOW_HEIGHT / SIMULATION_WINDOW_HEIGHT) * (SIMULATION_SIZE_SQRT / GRID_SIZE)) as f32;
+const SIMULATION_SIZE_SQRT: f64 = 8.0; //don't touch
+const SIMULATION_SIZE: f32 = 64.0; //don't touch
+const SIMULATION_WINDOW_HEIGHT: f64 = 512.0; //don't touch
 
 fn dist(a_x: f64, a_y: f64, b_x: f64, b_y: f64) -> f64 {
     ((b_x - a_x) * (b_x - a_x) + (b_y - a_y) * (b_y - a_y)).sqrt()
@@ -64,8 +69,8 @@ impl Player {
         match (is_key_down(KeyCode::Right), is_key_down(KeyCode::Left)) {
             (true, false) => {
                 self.angle += 0.03;
-                if self.angle > 2.0 * PI {
-                    self.angle -= 2.0 * PI;
+                if self.angle > TAU {
+                    self.angle -= TAU;
                 }
                 self.delta_x = self.angle.cos();
                 self.delta_y = self.angle.sin();
@@ -73,7 +78,7 @@ impl Player {
             (false, true) => {
                 self.angle -= 0.03;
                 if self.angle < 0.0 {
-                    self.angle += 2.0 * PI;
+                    self.angle += TAU;
                 }
                 self.delta_x = self.angle.cos();
                 self.delta_y = self.angle.sin();
@@ -95,33 +100,32 @@ impl Player {
             yo = 10.0;
         }
 
-        let block_area = 64.0;
         let rect_center = self.rect.center();
 
         match (is_key_down(KeyCode::Down), is_key_down(KeyCode::Up)) {
             (true, false) => {
-                if map[((rect_center.x - xo) / block_area) as usize]
-                    [(rect_center.y / block_area) as usize]
+                if map[((rect_center.x - xo) / SIMULATION_SIZE) as usize]
+                    [(rect_center.y / SIMULATION_SIZE) as usize]
                     == 0
                 {
                     self.rect.x -= self.delta_x as f32;
                 }
-                if map[(rect_center.x / block_area) as usize]
-                    [((rect_center.y - yo) / block_area) as usize]
+                if map[(rect_center.x / SIMULATION_SIZE) as usize]
+                    [((rect_center.y - yo) / SIMULATION_SIZE) as usize]
                     == 0
                 {
                     self.rect.y -= self.delta_y as f32;
                 }
             }
             (false, true) => {
-                if map[((rect_center.x + xo) / block_area) as usize]
-                    [(rect_center.y / block_area) as usize]
+                if map[((rect_center.x + xo) / SIMULATION_SIZE) as usize]
+                    [(rect_center.y / SIMULATION_SIZE) as usize]
                     == 0
                 {
                     self.rect.x += self.delta_x as f32;
                 }
-                if map[(rect_center.x / block_area) as usize]
-                    [((rect_center.y + yo) / block_area) as usize]
+                if map[(rect_center.x / SIMULATION_SIZE) as usize]
+                    [((rect_center.y + yo) / SIMULATION_SIZE) as usize]
                     == 0
                 {
                     self.rect.y += self.delta_y as f32;
@@ -139,7 +143,7 @@ impl Player {
         let mut ray_y = 0.0;
         let mut ray_x = 0.0;
         let mut xo = 0.0;
-        let mut yo = 0.0;
+        let mut yo: f64 = 0.0;
         let rect_center = self.rect.center();
         let mut dist_total = 0.0;
         let mut line_o;
@@ -149,14 +153,12 @@ impl Player {
             RAY_DENSITY
         };
 
-        let block_area = 8.0 * 8.0;
-
         let mut rays_angle = self.angle - DEGREE * FOV / 2.0;
         if rays_angle < 0.0 {
-            rays_angle += 2.0 * PI;
+            rays_angle += TAU;
         }
-        if rays_angle > 2.0 * PI {
-            rays_angle -= 2.0 * PI;
+        if rays_angle > TAU {
+            rays_angle -= TAU;
         }
 
         for i in 0..((FOV * true_ray_density) as i32) {
@@ -172,34 +174,32 @@ impl Player {
             if rays_angle > PI {
                 //looking up
                 // ray_y = ((self.rect.y as i64 >> 6) << 6) as f64 - 0.0001;
-                ray_y = (((self.rect.y as i64) / block_area as i64) * block_area as i64) as f64
+                ray_y = (((h_y as i64) / SIMULATION_SIZE as i64) * SIMULATION_SIZE as i64) as f64
                     - 0.0001;
-                ray_x = (self.rect.y as f64 - ray_y) * a_tan + self.rect.x as f64;
-                yo = -block_area;
+                ray_x = (h_y - ray_y) * a_tan + h_x;
+                yo = -SIMULATION_SIZE as f64;
                 xo = -yo * a_tan;
-            }
-            if rays_angle < PI {
+            } else if rays_angle < PI {
                 //looking down
                 // ray_y = ((self.rect.y as i64 >> 6) << 6) as f64 + 64.0;
-                ray_y = (((self.rect.y as i64) / block_area as i64) * block_area as i64) as f64
-                    + block_area;
-                ray_x = (self.rect.y as f64 - ray_y) * a_tan + self.rect.x as f64;
-                yo = block_area;
+                ray_y = (((h_y as i64) / SIMULATION_SIZE as i64) * SIMULATION_SIZE as i64) as f64
+                    + SIMULATION_SIZE as f64;
+                ray_x = (h_y - ray_y) * a_tan + h_x;
+                yo = SIMULATION_SIZE as f64;
                 xo = -yo * a_tan;
-            }
-            if rays_angle == 0.0 || rays_angle == PI {
+            } else if rays_angle == 0.0 || rays_angle == PI {
                 // looking straight left or right
-                ray_x = self.rect.x as f64;
-                ray_y = self.rect.y as f64;
+                ray_x = h_x;
+                ray_y = h_y;
                 dof = GRID_SIZE;
             }
 
             while dof < GRID_SIZE {
-                let map_x = (ray_x as u32) >> 6;
-                let map_y = (ray_y as u32) >> 6;
-                if map_x < GRID_SIZE as u32
-                    && map_y < GRID_SIZE as u32
-                    && map[map_x as usize][map_y as usize] == 1
+                let map_x = (ray_x as usize) >> 6;
+                let map_y = (ray_y as usize) >> 6;
+                if map_x < GRID_SIZE as usize
+                    && map_y < GRID_SIZE as usize
+                    && map[map_x][map_y] == 1
                 {
                     h_x = ray_x;
                     h_y = ray_y;
@@ -225,34 +225,34 @@ impl Player {
             if rays_angle > P2 && rays_angle < P3 {
                 //looking left
                 // ray_x = ((self.rect.x as i64 >> 6) << 6) as f64 - 0.0001;
-                ray_x = (((self.rect.x as i64) / block_area as i64) * block_area as i64) as f64
+                ray_x = (((v_x as i64) / SIMULATION_SIZE as i64) * SIMULATION_SIZE as i64) as f64
                     - 0.0001;
-                ray_y = (self.rect.x as f64 - ray_x) * n_tan + self.rect.y as f64;
-                xo = -block_area;
+                ray_y = (v_x - ray_x) * n_tan + v_y;
+                xo = -SIMULATION_SIZE as f64;
                 yo = -xo * n_tan;
             }
             if rays_angle < P2 || rays_angle > P3 {
                 //looking right
                 // ray_x = ((self.rect.x as i64 >> 6) << 6) as f64 + 64.0;
-                ray_x = (((self.rect.x as i64) / block_area as i64) * block_area as i64) as f64
-                    + block_area;
-                ray_y = (self.rect.x as f64 - ray_x) * n_tan + self.rect.y as f64;
-                xo = block_area;
+                ray_x = (((v_x as i64) / SIMULATION_SIZE as i64) * SIMULATION_SIZE as i64) as f64
+                    + SIMULATION_SIZE as f64;
+                ray_y = (v_x - ray_x) * n_tan + v_y as f64;
+                xo = SIMULATION_SIZE as f64;
                 yo = -xo * n_tan;
             }
             if rays_angle == 0.0 || rays_angle == PI {
                 // looking straight up or down
-                ray_x = self.rect.x as f64;
-                ray_y = self.rect.y as f64;
+                ray_x = v_x;
+                ray_y = v_y;
                 dof = GRID_SIZE;
             }
 
             while dof < GRID_SIZE {
-                let map_x = (ray_x as u32) >> 6;
-                let map_y = (ray_y as u32) >> 6;
-                if map_x < GRID_SIZE as u32
-                    && map_y < GRID_SIZE as u32
-                    && map[map_x as usize][map_y as usize] == 1
+                let map_x = (ray_x as usize) >> 6;
+                let map_y = (ray_y as usize) >> 6;
+                if map_x < GRID_SIZE as usize
+                    && map_y < GRID_SIZE as usize
+                    && map[map_x][map_y] == 1
                 {
                     v_x = ray_x;
                     v_y = ray_y;
@@ -293,65 +293,62 @@ impl Player {
             // draw 3d scene
             let mut c_a = self.angle - rays_angle;
             if c_a < 0.0 {
-                c_a += 2.0 * PI;
+                c_a += TAU;
             }
-            if rays_angle > 2.0 * PI {
-                c_a -= 2.0 * PI;
+            if rays_angle > TAU {
+                c_a -= TAU;
             }
 
             dist_total = dist_total * c_a.cos().abs(); // fix fisheye
 
-            let max_height = WINDOW_HEIGHT;
-            let mut line_h: f64 = (64.0 * max_height) / dist_total;
+            let max_height: f32 = WINDOW_HEIGHT as f32;
+            let mut line_h: f32 = (SIMULATION_SIZE * max_height) / dist_total as f32;
             if line_h > max_height {
                 line_h = max_height;
             }
-            line_o = WINDOW_HEIGHT / 2.0 - line_h / 2.0;
+            line_o = WINDOW_HEIGHT as f32 / 2.0 - line_h / 2.0;
 
-            let wall_width = if should_draw_rays {
-                (WINDOW_WIDTH / 2.0) / (FOV * true_ray_density)
+            let wall_width;
+            let wall_o;
+            if should_draw_rays {
+                wall_o = WINDOW_WIDTH as f32 / 2.0;
+                wall_width = ((WINDOW_WIDTH / 2.0) / (FOV * true_ray_density)) as f32;
             } else {
-                WINDOW_WIDTH / (FOV * true_ray_density)
-            };
-
-            let wall_o = if should_draw_rays {
-                WINDOW_WIDTH / 2.0
-            } else {
-                0.0
-            };
-
+                wall_o = 0.0;
+                wall_width = (WINDOW_WIDTH / (FOV * true_ray_density)) as f32;
+            }
             //walls
             draw_rectangle(
-                i as f32 * wall_width as f32 + wall_o as f32,
-                line_o as f32,
-                wall_width as f32,
-                line_h as f32,
+                i as f32 * wall_width + wall_o,
+                line_o,
+                wall_width,
+                line_h,
                 rect_color,
             );
 
             //floor
             draw_rectangle(
-                i as f32 * wall_width as f32 + wall_o as f32,
-                (line_o + line_h) as f32,
-                wall_width as f32,
-                (WINDOW_HEIGHT - (line_o + line_h)) as f32,
+                i as f32 * wall_width + wall_o,
+                line_o + line_h,
+                wall_width,
+                WINDOW_HEIGHT as f32 - (line_o + line_h),
                 BROWN,
             );
 
             //ceiling
             draw_rectangle(
-                i as f32 * wall_width as f32 + wall_o as f32,
-                0.0 as f32,
-                wall_width as f32,
-                (line_o) as f32,
+                i as f32 * wall_width + wall_o,
+                0.0,
+                wall_width,
+                line_o,
                 SKYBLUE,
             );
             rays_angle += DEGREE / true_ray_density;
             if rays_angle < 0.0 {
-                rays_angle += 2.0 * PI;
+                rays_angle += TAU;
             }
-            if rays_angle > 2.0 * PI {
-                rays_angle -= 2.0 * PI;
+            if rays_angle > TAU {
+                rays_angle -= TAU;
             }
         }
     }
@@ -411,12 +408,7 @@ impl World {
     pub fn draw_map_2d(&self) {
         for (y, row) in self.map.iter().enumerate() {
             for (x, block) in row.iter().enumerate() {
-                let color: Color;
-                if block == &1 {
-                    color = WHITE;
-                } else {
-                    color = BLACK;
-                };
+                let color = if block == &1 { WHITE } else { BLACK };
                 let size = (WINDOW_HEIGHT / GRID_SIZE) as f32;
 
                 let xo = (x as f32) * size;
