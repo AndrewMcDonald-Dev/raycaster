@@ -68,7 +68,7 @@ impl Player {
     pub fn update(&mut self, map: [[u32; GRID_SIZE as usize]; GRID_SIZE as usize]) {
         match (is_key_down(KeyCode::Right), is_key_down(KeyCode::Left)) {
             (true, false) => {
-                self.angle += 0.03;
+                self.angle += 0.02;
                 if self.angle > TAU {
                     self.angle -= TAU;
                 }
@@ -76,7 +76,7 @@ impl Player {
                 self.delta_y = self.angle.sin();
             }
             (false, true) => {
-                self.angle -= 0.03;
+                self.angle -= 0.02;
                 if self.angle < 0.0 {
                     self.angle += TAU;
                 }
@@ -140,13 +140,12 @@ impl Player {
         map: [[u32; GRID_SIZE as usize]; GRID_SIZE as usize],
         should_draw_rays: bool,
     ) {
+        let mut dist_total = 0.0;
         let mut ray_y = 0.0;
         let mut ray_x = 0.0;
         let mut xo = 0.0;
         let mut yo: f64 = 0.0;
         let rect_center = self.rect.center();
-        let mut dist_total = 0.0;
-        let mut line_o;
         let true_ray_density = if should_draw_rays {
             RAY_DENSITY / 2.0
         } else {
@@ -299,50 +298,15 @@ impl Player {
                 c_a -= TAU;
             }
 
-            dist_total = dist_total * c_a.cos().abs(); // fix fisheye
-
-            let max_height: f32 = WINDOW_HEIGHT as f32;
-            let mut line_h: f32 = (SIMULATION_SIZE * max_height) / dist_total as f32;
-            if line_h > max_height {
-                line_h = max_height;
-            }
-            line_o = WINDOW_HEIGHT as f32 / 2.0 - line_h / 2.0;
-
-            let wall_width;
-            let wall_o;
-            if should_draw_rays {
-                wall_o = WINDOW_WIDTH as f32 / 2.0;
-                wall_width = ((WINDOW_WIDTH / 2.0) / (FOV * true_ray_density)) as f32;
-            } else {
-                wall_o = 0.0;
-                wall_width = (WINDOW_WIDTH / (FOV * true_ray_density)) as f32;
-            }
-            //walls
-            draw_rectangle(
-                i as f32 * wall_width + wall_o,
-                line_o,
-                wall_width,
-                line_h,
+            draw_3d_view(
+                dist_total,
                 rect_color,
+                true_ray_density,
+                should_draw_rays,
+                i,
+                c_a,
             );
 
-            //floor
-            draw_rectangle(
-                i as f32 * wall_width + wall_o,
-                line_o + line_h,
-                wall_width,
-                WINDOW_HEIGHT as f32 - (line_o + line_h),
-                BROWN,
-            );
-
-            //ceiling
-            draw_rectangle(
-                i as f32 * wall_width + wall_o,
-                0.0,
-                wall_width,
-                line_o,
-                SKYBLUE,
-            );
             rays_angle += DEGREE / true_ray_density;
             if rays_angle < 0.0 {
                 rays_angle += TAU;
@@ -354,6 +318,59 @@ impl Player {
     }
 }
 
+fn draw_3d_view(
+    dist_total: f64,
+    rect_color: Color,
+    true_ray_density: f64,
+    should_draw_rays: bool,
+    i: i32,
+    c_a: f64,
+) {
+    let dist_total = dist_total * c_a.cos().abs(); // fix fisheye
+
+    let max_height: f32 = WINDOW_HEIGHT as f32;
+    let mut line_h: f32 = (SIMULATION_SIZE * max_height) / dist_total as f32;
+    if line_h > max_height {
+        line_h = max_height;
+    }
+    let line_o = WINDOW_HEIGHT as f32 / 2.0 - line_h / 2.0;
+
+    let wall_width;
+    let wall_o;
+    if should_draw_rays {
+        wall_o = WINDOW_WIDTH as f32 / 2.0;
+        wall_width = ((WINDOW_WIDTH / 2.0) / (FOV * true_ray_density)) as f32;
+    } else {
+        wall_o = 0.0;
+        wall_width = (WINDOW_WIDTH / (FOV * true_ray_density)) as f32;
+    }
+    //walls
+    draw_rectangle(
+        i as f32 * wall_width + wall_o,
+        line_o,
+        wall_width,
+        line_h,
+        rect_color,
+    );
+
+    //floor
+    draw_rectangle(
+        i as f32 * wall_width + wall_o,
+        line_o + line_h,
+        wall_width,
+        WINDOW_HEIGHT as f32 - (line_o + line_h),
+        BROWN,
+    );
+
+    //ceiling
+    draw_rectangle(
+        i as f32 * wall_width + wall_o,
+        0.0,
+        wall_width,
+        line_o,
+        SKYBLUE,
+    );
+}
 struct World {
     map: [[u32; GRID_SIZE as usize]; GRID_SIZE as usize],
 }
@@ -389,11 +406,11 @@ impl World {
                 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
                 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
                 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1],
+                [1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1],
+                [1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1],
+                [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
+                [1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1],
                 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
                 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
                 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
